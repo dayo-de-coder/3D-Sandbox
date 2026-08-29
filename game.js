@@ -1,11 +1,24 @@
 import * as THREE from
     "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js";
 
+import {
+    World,
+    Dimensions,
+    Time,
+    createWorldBlock,
+    removeWorldBlock,
+    getWorldBlock,
+    getActiveBlocks,
+    travelToTime,
+    affectLowerDimension
+} from "./world.js";
+
 // =====================================
 // SETUP
 // =====================================
 
-const game = document.getElementById("game");
+const game =
+    document.getElementById("game");
 
 const dimensionDisplay =
     document.getElementById("dimension");
@@ -15,9 +28,6 @@ const message =
 
 const scene =
     new THREE.Scene();
-
-scene.background =
-    new THREE.Color(0x87ceeb);
 
 const camera =
     new THREE.PerspectiveCamera(
@@ -50,7 +60,7 @@ game.appendChild(
 );
 
 // =====================================
-// LIGHTING
+// LIGHT
 // =====================================
 
 const sun =
@@ -127,10 +137,6 @@ const materials = {
         })
 };
 
-// =====================================
-// BLOCK SYSTEM
-// =====================================
-
 const blockGeometry =
     new THREE.BoxGeometry(
         1,
@@ -138,106 +144,106 @@ const blockGeometry =
         1
     );
 
-const blocks = [];
+// =====================================
+// RENDERED BLOCKS
+// =====================================
 
-const blockMap =
+const renderedBlocks =
     new Map();
 
-function blockKey(
-    x,
-    y,
-    z
+function materialFor(
+    type
 ) {
-    return `${x},${y},${z}`;
+
+    return materials[type] ||
+        materials.stone;
 }
 
-function addBlock(
-    x,
-    y,
-    z,
-    material,
-    dimension = 0
-) {
+function renderWorld() {
 
-    const key =
-        blockKey(x, y, z);
+    const active =
+        getActiveBlocks(
+            Dimensions.current,
+            Time.now()
+        );
 
-    if (
-        blockMap.has(key)
+    const activeIds =
+        new Set(
+            active.map(
+                block => block.id
+            )
+        );
+
+    // Remove blocks that should
+    // no longer be visible.
+
+    for (
+        const [
+            id,
+            mesh
+        ]
+        of renderedBlocks
     ) {
-        return;
+
+        if (
+            !activeIds.has(id)
+        ) {
+
+            scene.remove(
+                mesh
+            );
+
+            renderedBlocks.delete(
+                id
+            );
+        }
     }
 
-    const block =
-        new THREE.Mesh(
-            blockGeometry,
-            material
-        );
+    // Add/update visible blocks.
 
-    block.position.set(
-        x,
-        y,
-        z
-    );
+    for (
+        const block
+        of active
+    ) {
 
-    block.userData.dimension =
-        dimension;
+        let mesh =
+            renderedBlocks.get(
+                block.id
+            );
 
-    block.userData.isBlock =
-        true;
+        if (!mesh) {
 
-    scene.add(block);
+            mesh =
+                new THREE.Mesh(
+                    blockGeometry,
+                    materialFor(
+                        block.type
+                    )
+                );
 
-    blocks.push(block);
+            mesh.userData.blockId =
+                block.id;
 
-    blockMap.set(
-        key,
-        block
-    );
+            scene.add(
+                mesh
+            );
 
-    updateBlockVisibility();
+            renderedBlocks.set(
+                block.id,
+                mesh
+            );
+        }
 
-    return block;
-}
-
-function removeBlock(block) {
-
-    const x =
-        Math.round(
-            block.position.x
-        );
-
-    const y =
-        Math.round(
-            block.position.y
-        );
-
-    const z =
-        Math.round(
-            block.position.z
-        );
-
-    blockMap.delete(
-        blockKey(x, y, z)
-    );
-
-    const index =
-        blocks.indexOf(block);
-
-    if (index !== -1) {
-        blocks.splice(
-            index,
-            1
+        mesh.position.set(
+            block.x,
+            block.y,
+            block.z
         );
     }
-
-    scene.remove(
-        block
-    );
 }
 
 // =====================================
-// TERRAIN
+// GENERATE WORLD
 // =====================================
 
 function terrainHeight(
@@ -245,28 +251,28 @@ function terrainHeight(
     z
 ) {
 
-    const value =
-        Math.sin(x * 0.45) * 1.5 +
-        Math.cos(z * 0.35) * 1.5 +
-        Math.sin(
-            (x + z) * 0.2
-        );
-
     return Math.max(
         0,
         Math.floor(
-            3 + value
+            3 +
+            Math.sin(
+                x * 0.45
+            ) * 1.5 +
+            Math.cos(
+                z * 0.35
+            ) * 1.5 +
+            Math.sin(
+                (x + z) * 0.2
+            )
         )
     );
 }
 
-function createTree(
+function addTree(
     x,
     y,
     z
 ) {
-
-    // Trunk
 
     for (
         let i = 0;
@@ -274,15 +280,13 @@ function createTree(
         i++
     ) {
 
-        addBlock(
+        createWorldBlock(
             x,
             y + i,
             z,
-            materials.wood
+            "wood"
         );
     }
-
-    // Leaves
 
     for (
         let dx = -2;
@@ -308,11 +312,11 @@ function createTree(
                     4
                 ) {
 
-                    addBlock(
+                    createWorldBlock(
                         x + dx,
                         y + dy,
                         z + dz,
-                        materials.leaves
+                        "leaves"
                     );
                 }
             }
@@ -320,7 +324,7 @@ function createTree(
     }
 }
 
-function createWorld() {
+function generateWorld() {
 
     const size = 24;
 
@@ -348,33 +352,32 @@ function createWorld() {
                 y++
             ) {
 
-                let material =
-                    materials.stone;
+                let type =
+                    "stone";
 
                 if (
                     y === height
                 ) {
 
-                    material =
-                        materials.grass;
+                    type =
+                        "grass";
 
                 } else if (
                     y > height - 3
                 ) {
 
-                    material =
-                        materials.dirt;
+                    type =
+                        "dirt";
                 }
 
-                addBlock(
+                createWorldBlock(
                     x,
                     y,
                     z,
-                    material
+                    type,
+                    3
                 );
             }
-
-            // Random trees
 
             if (
                 Math.random() < 0.035 &&
@@ -383,7 +386,7 @@ function createWorld() {
                 Math.abs(z) > 3
             ) {
 
-                createTree(
+                addTree(
                     x,
                     height + 1,
                     z
@@ -392,7 +395,7 @@ function createWorld() {
         }
     }
 
-    // Dimension blocks
+    // Special higher-dimensional blocks.
 
     for (
         let x = -3;
@@ -400,87 +403,213 @@ function createWorld() {
         x++
     ) {
 
-        addBlock(
+        createWorldBlock(
             x,
             4,
             -8,
-            materials.purple,
+            "purple",
             4
         );
 
-        addBlock(
+        createWorldBlock(
             x,
             4,
             -10,
-            materials.pink,
+            "pink",
             5
         );
 
-        addBlock(
+        createWorldBlock(
             x,
             4,
             -12,
-            materials.orange,
+            "orange",
             6
         );
     }
+
+    renderWorld();
 }
 
-createWorld();
+if (
+    World.blocks.size === 0
+) {
+
+    generateWorld();
+
+} else {
+
+    renderWorld();
+}
 
 // =====================================
-// DIMENSIONS
+// DIMENSION SYSTEM
 // =====================================
-
-let currentDimension = 3;
 
 const dimensionColors = {
 
     1: 0x202020,
+
     2: 0x3575d3,
+
     3: 0x87ceeb,
+
     4: 0x6c35de,
+
     5: 0xd62976,
+
     6: 0xff9f00
+
 };
 
-function updateBlockVisibility() {
+let warpActive = false;
 
-    for (
-        const block of blocks
-    ) {
+let warpProgress = 0;
 
-        const dimension =
-            block.userData.dimension;
+let warpFrom = 3;
 
-        block.visible =
-            dimension === 0 ||
-            dimension ===
-            currentDimension;
-    }
-}
+let warpTo = 3;
 
-function switchDimension(
+function setDimension(
     dimension
 ) {
 
-    currentDimension =
+    if (
+        dimension < 1 ||
+        dimension > 6
+    ) {
+        return;
+    }
+
+    if (
+        dimension ===
+        Dimensions.current
+    ) {
+        return;
+    }
+
+    warpFrom =
+        Dimensions.current;
+
+    warpTo =
         dimension;
+
+    if (
+        dimension >= 4
+    ) {
+
+        startWarp();
+
+    } else {
+
+        Dimensions.current =
+            dimension;
+
+        World.dimension =
+            dimension;
+
+        finishDimensionChange();
+    }
+}
+
+function finishDimensionChange() {
 
     scene.background =
         new THREE.Color(
             dimensionColors[
-                dimension
+                Dimensions.current
             ]
         );
 
     dimensionDisplay.textContent =
-        `${dimension}D`;
+        `${Dimensions.current}D`;
 
-    updateBlockVisibility();
+    renderWorld();
+
+    updateVision();
 
     message.textContent =
-        `Warped into ${dimension}D!`;
+        `Entered ${Dimensions.current}D`;
+}
+
+// =====================================
+// WARP EFFECT
+// =====================================
+
+function startWarp() {
+
+    warpActive = true;
+
+    warpProgress = 0;
+
+    message.textContent =
+        `Warping ${warpFrom}D → ${warpTo}D...`;
+}
+
+function updateWarp(
+    delta
+) {
+
+    if (!warpActive) {
+        return;
+    }
+
+    warpProgress +=
+        delta * 1.8;
+
+    const amount =
+        Math.min(
+            warpProgress,
+            1
+        );
+
+    // Distort camera FOV.
+
+    camera.fov =
+        75 +
+        Math.sin(
+            amount *
+            Math.PI *
+            8
+        ) *
+        25 *
+        (1 - amount);
+
+    camera.updateProjectionMatrix();
+
+    // Spin during warp.
+
+    camera.rotation.z =
+        Math.sin(
+            amount *
+            Math.PI *
+            10
+        ) *
+        0.08;
+
+    if (
+        warpProgress >= 1
+    ) {
+
+        warpActive =
+            false;
+
+        Dimensions.current =
+            warpTo;
+
+        World.dimension =
+            warpTo;
+
+        camera.rotation.z =
+            0;
+
+        camera.fov =
+            75;
+
+        camera.updateProjectionMatrix();
+
+        finishDimensionChange();
+    }
 }
 
 // =====================================
@@ -509,17 +638,13 @@ for (
     button.textContent =
         `${i}D`;
 
-    button.addEventListener(
-        "click",
+    button.onclick =
         event => {
 
             event.stopPropagation();
 
-            switchDimension(
-                i
-            );
-        }
-    );
+            setDimension(i);
+        };
 
     dimensionMenu.appendChild(
         button
@@ -529,6 +654,67 @@ for (
 document.body.appendChild(
     dimensionMenu
 );
+
+// =====================================
+// VISION
+// =====================================
+
+function updateVision() {
+
+    const dimension =
+        Dimensions.current;
+
+    // 1D
+
+    if (
+        dimension === 1
+    ) {
+
+        camera.fov = 25;
+
+    // 2D
+
+    } else if (
+        dimension === 2
+    ) {
+
+        camera.fov = 45;
+
+    // 3D
+
+    } else if (
+        dimension === 3
+    ) {
+
+        camera.fov = 75;
+
+    // 4D
+
+    } else if (
+        dimension === 4
+    ) {
+
+        camera.fov = 90;
+
+    // 5D
+
+    } else if (
+        dimension === 5
+    ) {
+
+        camera.fov = 105;
+
+    // 6D
+
+    } else if (
+        dimension === 6
+    ) {
+
+        camera.fov = 120;
+    }
+
+    camera.updateProjectionMatrix();
+}
 
 // =====================================
 // PLAYER
@@ -569,6 +755,12 @@ function collidesAt(
     position
 ) {
 
+    const blocks =
+        getActiveBlocks(
+            Dimensions.current,
+            Time.now()
+        );
+
     const minX =
         position.x -
         player.width / 2;
@@ -578,12 +770,10 @@ function collidesAt(
         player.width / 2;
 
     const minY =
-        position.y -
-        1.5;
+        position.y - 1.5;
 
     const maxY =
-        position.y +
-        0.3;
+        position.y + 0.3;
 
     const minZ =
         position.z -
@@ -593,82 +783,21 @@ function collidesAt(
         position.z +
         player.depth / 2;
 
-    const startX =
-        Math.floor(
-            minX - 0.5
-        );
-
-    const endX =
-        Math.floor(
-            maxX + 0.5
-        );
-
-    const startY =
-        Math.floor(
-            minY - 0.5
-        );
-
-    const endY =
-        Math.floor(
-            maxY + 0.5
-        );
-
-    const startZ =
-        Math.floor(
-            minZ - 0.5
-        );
-
-    const endZ =
-        Math.floor(
-            maxZ + 0.5
-        );
-
     for (
-        let x = startX;
-        x <= endX;
-        x++
+        const block
+        of blocks
     ) {
 
-        for (
-            let y = startY;
-            y <= endY;
-            y++
+        if (
+            maxX > block.x - 0.5 &&
+            minX < block.x + 0.5 &&
+            maxY > block.y - 0.5 &&
+            minY < block.y + 0.5 &&
+            maxZ > block.z - 0.5 &&
+            minZ < block.z + 0.5
         ) {
 
-            for (
-                let z = startZ;
-                z <= endZ;
-                z++
-            ) {
-
-                const block =
-                    blockMap.get(
-                        blockKey(
-                            x,
-                            y,
-                            z
-                        )
-                    );
-
-                if (
-                    !block ||
-                    !block.visible
-                ) {
-                    continue;
-                }
-
-                if (
-                    maxX > x - 0.5 &&
-                    minX < x + 0.5 &&
-                    maxY > y - 0.5 &&
-                    minY < y + 0.5 &&
-                    maxZ > z - 0.5 &&
-                    minZ < z + 0.5
-                ) {
-
-                    return true;
-                }
-            }
+            return true;
         }
     }
 
@@ -676,7 +805,7 @@ function collidesAt(
 }
 
 // =====================================
-// MOVEMENT
+// INPUT
 // =====================================
 
 const keys = {};
@@ -688,16 +817,15 @@ window.addEventListener(
         keys[event.code] =
             true;
 
-        // Dimension keys
+        // 1D-6D
 
         if (
-            event.code >=
-            "Digit1" &&
-            event.code <=
-            "Digit6"
+            event.code.startsWith(
+                "Digit"
+            )
         ) {
 
-            const dimension =
+            const number =
                 Number(
                     event.code.replace(
                         "Digit",
@@ -705,12 +833,59 @@ window.addEventListener(
                     )
                 );
 
-            switchDimension(
-                dimension
-            );
+            if (
+                number >= 1 &&
+                number <= 6
+            ) {
+
+                setDimension(
+                    number
+                );
+            }
         }
 
-        // Jump
+        // TIME TRAVEL
+
+        if (
+            event.code ===
+            "KeyQ"
+        ) {
+
+            Time.goPast();
+
+            message.textContent =
+                `⏪ Time: ${Time.now()}`;
+
+            renderWorld();
+        }
+
+        if (
+            event.code ===
+            "KeyE"
+        ) {
+
+            Time.goFuture();
+
+            message.textContent =
+                `⏩ Time: ${Time.now()}`;
+
+            renderWorld();
+        }
+
+        if (
+            event.code ===
+            "KeyR"
+        ) {
+
+            Time.goPresent();
+
+            message.textContent =
+                "⏺ Returned to present";
+
+            renderWorld();
+        }
+
+        // JUMP
 
         if (
             event.code ===
@@ -725,7 +900,7 @@ window.addEventListener(
                 false;
         }
 
-        // Camera forward
+        // CAMERA
 
         if (
             event.code ===
@@ -733,12 +908,8 @@ window.addEventListener(
             !event.shiftKey
         ) {
 
-            cycleCamera(
-                1
-            );
+            cycleCamera(1);
         }
-
-        // Camera backwards
 
         if (
             event.code ===
@@ -746,9 +917,7 @@ window.addEventListener(
             event.shiftKey
         ) {
 
-            cycleCamera(
-                -1
-            );
+            cycleCamera(-1);
         }
     }
 );
@@ -763,7 +932,7 @@ window.addEventListener(
 );
 
 // =====================================
-// CAMERA MODES
+// CAMERA
 // =====================================
 
 const cameraModes = [
@@ -784,6 +953,7 @@ function cycleCamera(
     if (
         cameraMode < 0
     ) {
+
         cameraMode =
             cameraModes.length - 1;
     }
@@ -792,6 +962,7 @@ function cycleCamera(
         cameraMode >=
         cameraModes.length
     ) {
+
         cameraMode = 0;
     }
 
@@ -804,6 +975,7 @@ function cycleCamera(
 // =====================================
 
 let yaw = 0;
+
 let pitch = 0;
 
 document.body.addEventListener(
@@ -818,13 +990,7 @@ document.body.addEventListener(
             return;
         }
 
-        if (
-            document.pointerLockElement !==
-            document.body
-        ) {
-
-            document.body.requestPointerLock();
-        }
+        document.body.requestPointerLock();
     }
 );
 
@@ -859,7 +1025,7 @@ document.addEventListener(
 );
 
 // =====================================
-// PLAYER MOVEMENT WITH COLLISION
+// MOVEMENT
 // =====================================
 
 function moveAxis(
@@ -868,17 +1034,16 @@ function moveAxis(
 ) {
 
     const steps =
-        Math.ceil(
-            Math.abs(amount) /
-            0.1
+        Math.max(
+            1,
+            Math.ceil(
+                Math.abs(amount) /
+                0.1
+            )
         );
 
     const step =
-        amount /
-        Math.max(
-            steps,
-            1
-        );
+        amount / steps;
 
     for (
         let i = 0;
@@ -972,8 +1137,6 @@ function movePlayer(
         );
     }
 
-    // Gravity
-
     player.velocity.y -=
         player.gravity *
         delta;
@@ -984,32 +1147,27 @@ function movePlayer(
         delta
     );
 
-    // Check if standing
-
     const below =
         player.position.clone();
 
     below.y -= 0.05;
 
-    if (
-        collidesAt(below)
-    ) {
+    player.grounded =
+        collidesAt(
+            below
+        );
 
-        player.grounded =
-            true;
+    if (
+        player.grounded
+    ) {
 
         player.velocity.y =
             0;
-
-    } else {
-
-        player.grounded =
-            false;
     }
 }
 
 // =====================================
-// BLOCK BREAK / PLACE
+// BLOCK INTERACTION
 // =====================================
 
 const raycaster =
@@ -1037,15 +1195,11 @@ document.addEventListener(
             camera
         );
 
-        const visibleBlocks =
-            blocks.filter(
-                block =>
-                    block.visible
-            );
-
         const hits =
             raycaster.intersectObjects(
-                visibleBlocks
+                [
+                    ...renderedBlocks.values()
+                ]
             );
 
         if (
@@ -1054,73 +1208,102 @@ document.addEventListener(
             return;
         }
 
-        const hit =
-            hits[0];
+        const mesh =
+            hits[0].object;
+
+        const id =
+            mesh.userData.blockId;
 
         const block =
-            hit.object;
+            World.blocks.get(id);
 
-        // Left = break
+        if (!block) {
+            return;
+        }
+
+        // LEFT CLICK = BREAK
 
         if (
             event.button === 0
         ) {
 
-            removeBlock(
-                block
+            removeWorldBlock(
+                block.x,
+                block.y,
+                block.z
             );
+
+            // 4D+ can affect 3D.
+
+            if (
+                Dimensions.current >=
+                4
+            ) {
+
+                affectLowerDimension(
+                    Dimensions.current,
+                    3,
+                    {
+                        type: "BLOCK_REMOVED",
+                        x: block.x,
+                        y: block.y,
+                        z: block.z
+                    }
+                );
+            }
+
+            renderWorld();
 
             message.textContent =
                 "⛏️ Block broken!";
         }
 
-        // Right = place
+        // RIGHT CLICK = PLACE
 
         if (
-            event.button === 2
+            event.button === 2 &&
+            hits[0].face
         ) {
 
-            if (
-                !hit.face
-            ) {
-                return;
-            }
-
             const normal =
-                hit.face.normal.clone();
+                hits[0].face.normal;
 
-            const position =
-                block.position.clone();
-
-            position.add(
-                normal
-            );
-
-            // Don't place a block
-            // inside the player.
-
-            const testPosition =
-                position.clone();
-
-            if (
-                !collidesAt(
-                    player.position
-                )
-            ) {
-
-                addBlock(
-                    Math.round(
-                        testPosition.x
-                    ),
-                    Math.round(
-                        testPosition.y
-                    ),
-                    Math.round(
-                        testPosition.z
-                    ),
-                    materials.stone,
-                    0
+            const x =
+                Math.round(
+                    block.x +
+                    normal.x
                 );
+
+            const y =
+                Math.round(
+                    block.y +
+                    normal.y
+                );
+
+            const z =
+                Math.round(
+                    block.z +
+                    normal.z
+                );
+
+            const existing =
+                getWorldBlock(
+                    x,
+                    y,
+                    z
+                );
+
+            if (!existing) {
+
+                createWorldBlock(
+                    x,
+                    y,
+                    z,
+                    "stone",
+                    Dimensions.current
+                );
+
+                renderWorld();
 
                 message.textContent =
                     "🧱 Block placed!";
@@ -1132,6 +1315,7 @@ document.addEventListener(
 document.addEventListener(
     "contextmenu",
     event => {
+
         event.preventDefault();
     }
 );
@@ -1146,14 +1330,21 @@ function updateCamera() {
         cameraMode === 0
     ) {
 
-        // FIRST PERSON
-
         camera.position.copy(
             player.position
         );
 
         camera.position.y +=
             0.25;
+
+        camera.rotation.order =
+            "YXZ";
+
+        camera.rotation.y =
+            yaw;
+
+        camera.rotation.x =
+            pitch;
 
     } else {
 
@@ -1185,22 +1376,6 @@ function updateCamera() {
         camera.position.add(
             offset
         );
-    }
-
-    camera.rotation.order =
-        "YXZ";
-
-    if (
-        cameraMode === 0
-    ) {
-
-        camera.rotation.y =
-            yaw;
-
-        camera.rotation.x =
-            pitch;
-
-    } else {
 
         camera.lookAt(
             player.position
@@ -1209,7 +1384,7 @@ function updateCamera() {
 }
 
 // =====================================
-// LOOP
+// GAME LOOP
 // =====================================
 
 let previousTime =
@@ -1239,6 +1414,10 @@ function animate() {
         delta
     );
 
+    updateWarp(
+        delta
+    );
+
     updateCamera();
 
     renderer.render(
@@ -1253,6 +1432,11 @@ function animate() {
 
 dimensionDisplay.textContent =
     "3D";
+
+scene.background =
+    new THREE.Color(
+        dimensionColors[3]
+    );
 
 animate();
 
