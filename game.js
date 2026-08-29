@@ -1,39 +1,26 @@
 import * as THREE from
     "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js";
 
+// =====================================
+// SETUP
+// =====================================
+
 const game = document.getElementById("game");
 const dimensionDisplay = document.getElementById("dimension");
 const message = document.getElementById("message");
 
-// =====================================
-// THREE.JS
-// =====================================
-
 const scene = new THREE.Scene();
 
-scene.background =
-    new THREE.Color(0x87ceeb);
+const camera = new THREE.PerspectiveCamera(
+    75,
+    window.innerWidth / window.innerHeight,
+    0.1,
+    500
+);
 
-scene.fog =
-    new THREE.Fog(
-        0x87ceeb,
-        20,
-        100
-    );
-
-const camera =
-    new THREE.PerspectiveCamera(
-        75,
-        window.innerWidth /
-            window.innerHeight,
-        0.1,
-        500
-    );
-
-const renderer =
-    new THREE.WebGLRenderer({
-        antialias: true
-    });
+const renderer = new THREE.WebGLRenderer({
+    antialias: true
+});
 
 renderer.setSize(
     window.innerWidth,
@@ -41,43 +28,101 @@ renderer.setSize(
 );
 
 renderer.setPixelRatio(
-    Math.min(
-        window.devicePixelRatio,
-        2
-    )
+    Math.min(window.devicePixelRatio, 2)
 );
 
-game.appendChild(
-    renderer.domElement
+game.appendChild(renderer.domElement);
+
+// =====================================
+// DIMENSIONS
+// =====================================
+
+let currentDimension = 3;
+
+const dimensionNames = {
+    1: "1D",
+    2: "2D",
+    3: "3D",
+    4: "4D",
+    5: "5D",
+    6: "6D"
+};
+
+const dimensionColors = {
+    1: 0x222222,
+    2: 0x3b82f6,
+    3: 0x87ceeb,
+    4: 0x8b5cf6,
+    5: 0xec4899,
+    6: 0xffaa00
+};
+
+function updateDimensionUI() {
+    dimensionDisplay.textContent =
+        dimensionNames[currentDimension];
+
+    scene.background =
+        new THREE.Color(
+            dimensionColors[currentDimension]
+        );
+
+    if (currentDimension === 1) {
+        message.textContent =
+            "1D — Only forward and backward!";
+    }
+
+    if (currentDimension === 2) {
+        message.textContent =
+            "2D — Welcome to the flat world!";
+    }
+
+    if (currentDimension === 3) {
+        message.textContent =
+            "3D — Normal sandbox!";
+    }
+
+    if (currentDimension === 4) {
+        message.textContent =
+            "4D — The hidden layer has appeared!";
+    }
+
+    if (currentDimension === 5) {
+        message.textContent =
+            "5D — Another version of reality!";
+    }
+
+    if (currentDimension === 6) {
+        message.textContent =
+            "6D — The final dimension!";
+    }
+}
+
+// =====================================
+// LIGHTING
+// =====================================
+
+const sun = new THREE.DirectionalLight(
+    0xffffff,
+    2
 );
 
-// =====================================
-// LIGHTS
-// =====================================
-
-const sunlight =
-    new THREE.DirectionalLight(
-        0xffffff,
-        2
-    );
-
-sunlight.position.set(
+sun.position.set(
     20,
     30,
     10
 );
 
-scene.add(sunlight);
+scene.add(sun);
 
 scene.add(
     new THREE.AmbientLight(
         0xffffff,
-        0.5
+        0.6
     )
 );
 
 // =====================================
-// BLOCKS
+// BLOCK SYSTEM
 // =====================================
 
 const blocks = [];
@@ -89,20 +134,16 @@ const blockGeometry =
         1
     );
 
-const blockMaterial =
-    new THREE.MeshStandardMaterial({
-        color: 0x777777
-    });
-
 function createBlock(
     x,
     y,
     z,
-    color = 0x777777
+    color,
+    dimension = 0
 ) {
     const material =
         new THREE.MeshStandardMaterial({
-            color
+            color: color
         });
 
     const block =
@@ -117,12 +158,17 @@ function createBlock(
         z
     );
 
+    block.userData.dimension =
+        dimension;
+
     block.userData.isBlock =
         true;
 
     scene.add(block);
 
     blocks.push(block);
+
+    updateBlockVisibility();
 
     return block;
 }
@@ -142,23 +188,52 @@ function removeBlock(block) {
     scene.remove(block);
 }
 
+function updateBlockVisibility() {
+
+    for (const block of blocks) {
+
+        const blockDimension =
+            block.userData.dimension;
+
+        // Dimension 0 = exists everywhere.
+
+        if (blockDimension === 0) {
+            block.visible = true;
+        }
+
+        // Otherwise it only exists
+        // in its own dimension.
+
+        else {
+            block.visible =
+                blockDimension ===
+                currentDimension;
+        }
+    }
+}
+
 // =====================================
 // WORLD
 // =====================================
 
 function createWorld() {
 
-    // Ground
+    // ---------------------------------
+    // NORMAL GROUND
+    // ---------------------------------
+
     for (
-        let x = -10;
-        x <= 10;
+        let x = -12;
+        x <= 12;
         x++
     ) {
+
         for (
-            let z = -10;
-            z <= 10;
+            let z = -12;
+            z <= 12;
             z++
         ) {
+
             createBlock(
                 x,
                 -1,
@@ -168,55 +243,103 @@ function createWorld() {
         }
     }
 
-    // Starting structures
+    // ---------------------------------
+    // 3D STRUCTURE
+    // ---------------------------------
 
     for (
         let y = 0;
-        y < 3;
+        y < 4;
         y++
     ) {
+
         createBlock(
             4,
             y,
             -4,
-            0x888888
+            0x777777
         );
     }
 
+    // ---------------------------------
+    // 4D BLOCKS
+    // ---------------------------------
+
     for (
-        let x = -3;
-        x <= 3;
+        let x = -2;
+        x <= 2;
         x++
     ) {
+
         createBlock(
             x,
             0,
-            -7,
-            0xb07845
+            -8,
+            0x8b5cf6,
+            4
         );
     }
 
-    // Floating blocks
-
     createBlock(
-        2,
-        4,
-        -3,
-        0xffcc33
+        0,
+        1,
+        -8,
+        0xffffff,
+        4
     );
 
-    createBlock(
-        3,
-        5,
-        -3,
-        0xff5533
-    );
+    // ---------------------------------
+    // 5D BLOCKS
+    // ---------------------------------
+
+    for (
+        let x = -2;
+        x <= 2;
+        x++
+    ) {
+
+        createBlock(
+            x,
+            0,
+            -10,
+            0xec4899,
+            5
+        );
+    }
 
     createBlock(
-        4,
-        6,
-        -3,
-        0x6633ff
+        0,
+        1,
+        -10,
+        0xffffff,
+        5
+    );
+
+    // ---------------------------------
+    // 6D BLOCKS
+    // ---------------------------------
+
+    for (
+        let x = -2;
+        x <= 2;
+        x++
+    ) {
+
+        createBlock(
+            x,
+            0,
+            -12,
+            0xffaa00,
+            6
+        );
+    }
+
+    createBlock(
+        0,
+        1,
+        -12,
+        0xffffff,
+        6
     );
 }
 
@@ -252,7 +375,7 @@ camera.position.copy(
 );
 
 // =====================================
-// CONTROLS
+// MOVEMENT
 // =====================================
 
 const keys = {};
@@ -264,52 +387,57 @@ window.addEventListener(
         keys[event.code] = true;
 
         // Jump
+
         if (
             event.code === "Space" &&
             player.grounded
         ) {
+
             player.velocity.y =
                 player.jumpPower;
 
-            player.grounded = false;
+            player.grounded =
+                false;
         }
 
-        // Dimensions
+        // ---------------------------------
+        // DIMENSION KEYS
+        // ---------------------------------
 
         if (
             event.code === "Digit1"
         ) {
-            changeDimension(1);
+            switchDimension(1);
         }
 
         if (
             event.code === "Digit2"
         ) {
-            changeDimension(2);
+            switchDimension(2);
         }
 
         if (
             event.code === "Digit3"
         ) {
-            changeDimension(3);
+            switchDimension(3);
         }
 
         if (
             event.code === "Digit4"
         ) {
-            changeDimension(4);
+            switchDimension(4);
         }
 
         if (
             event.code === "Digit5"
         ) {
-            changeDimension(5);
+            switchDimension(5);
         }
 
         if (
             event.code === "Digit6"
         ) {
-            changeDimension(6);
+            switchDimension(6);
         }
     }
 );
@@ -317,9 +445,50 @@ window.addEventListener(
 window.addEventListener(
     "keyup",
     event => {
+
         keys[event.code] = false;
     }
 );
+
+// =====================================
+// DIMENSION SWITCHING
+// =====================================
+
+function switchDimension(
+    dimension
+) {
+
+    if (
+        dimension < 1 ||
+        dimension > 6
+    ) {
+        return;
+    }
+
+    currentDimension =
+        dimension;
+
+    updateDimensionUI();
+
+    updateBlockVisibility();
+
+    // Small dimension-shift effect
+
+    camera.fov = 90;
+
+    camera.updateProjectionMatrix();
+
+    setTimeout(
+        () => {
+
+            camera.fov = 75;
+
+            camera.updateProjectionMatrix();
+
+        },
+        150
+    );
+}
 
 // =====================================
 // MOUSE LOOK
@@ -336,10 +505,11 @@ document.body.addEventListener(
             document.pointerLockElement !==
             document.body
         ) {
+
             document.body.requestPointerLock();
 
             message.textContent =
-                "WASD to move • ESC to leave";
+                "WASD = Move • Click blocks • ESC = Release mouse";
         }
     }
 );
@@ -381,7 +551,7 @@ document.addEventListener(
 const raycaster =
     new THREE.Raycaster();
 
-const mouse =
+const center =
     new THREE.Vector2(
         0,
         0
@@ -399,16 +569,24 @@ document.addEventListener(
         }
 
         raycaster.setFromCamera(
-            mouse,
+            center,
             camera
         );
 
-        const hits =
-            raycaster.intersectObjects(
-                blocks
+        const visibleBlocks =
+            blocks.filter(
+                block =>
+                    block.visible
             );
 
-        if (hits.length === 0) {
+        const hits =
+            raycaster.intersectObjects(
+                visibleBlocks
+            );
+
+        if (
+            hits.length === 0
+        ) {
             return;
         }
 
@@ -418,184 +596,151 @@ document.addEventListener(
         const block =
             hit.object;
 
+        // ---------------------------------
         // LEFT CLICK = BREAK
+        // ---------------------------------
 
         if (
             event.button === 0
         ) {
 
-            // Don't remove ground directly
+            // Don't delete ground.
+
             if (
                 block.position.y >
                 -1
             ) {
+
                 removeBlock(block);
+
+                message.textContent =
+                    "Block removed!";
             }
         }
 
+        // ---------------------------------
         // RIGHT CLICK = PLACE
+        // ---------------------------------
 
         if (
             event.button === 2
         ) {
 
+            if (!hit.face) {
+                return;
+            }
+
             const normal =
                 hit.face.normal.clone();
 
-            const newPosition =
-                block.position.clone()
-                    .add(normal);
+            const position =
+                block.position.clone();
+
+            position.add(normal);
 
             createBlock(
                 Math.round(
-                    newPosition.x
+                    position.x
                 ),
                 Math.round(
-                    newPosition.y
+                    position.y
                 ),
                 Math.round(
-                    newPosition.z
-                )
+                    position.z
+                ),
+                getDimensionBlockColor(),
+                currentDimension
             );
+
+            message.textContent =
+                `${currentDimension}D block placed!`;
         }
     }
 );
 
-// Disable right-click menu
+// Disable browser right-click menu.
 
 document.addEventListener(
     "contextmenu",
     event => {
+
         event.preventDefault();
     }
 );
 
 // =====================================
-// DIMENSIONS
+// BLOCK COLORS
 // =====================================
 
-let currentDimension = 3;
+function getDimensionBlockColor() {
 
-function changeDimension(
-    dimension
-) {
-
-    currentDimension =
-        dimension;
-
-    dimensionDisplay.textContent =
-        `${dimension}D`;
-
-    if (dimension === 1) {
-        message.textContent =
-            "1D — Only one direction exists!";
+    if (
+        currentDimension === 1
+    ) {
+        return 0xaaaaaa;
     }
 
-    if (dimension === 2) {
-        message.textContent =
-            "2D — The world becomes flat!";
+    if (
+        currentDimension === 2
+    ) {
+        return 0x3b82f6;
     }
 
-    if (dimension === 3) {
-        message.textContent =
-            "3D — Normal sandbox mode!";
+    if (
+        currentDimension === 3
+    ) {
+        return 0x888888;
     }
 
-    if (dimension === 4) {
-        message.textContent =
-            "4D — Extra dimension unlocked!";
+    if (
+        currentDimension === 4
+    ) {
+        return 0x8b5cf6;
     }
 
-    if (dimension === 5) {
-        message.textContent =
-            "5D — Reality is getting weird!";
+    if (
+        currentDimension === 5
+    ) {
+        return 0xec4899;
     }
 
-    if (dimension === 6) {
-        message.textContent =
-            "6D — Maximum dimension!";
-    }
-
-    applyDimension();
+    return 0xffaa00;
 }
 
 // =====================================
-// DIMENSION EFFECTS
+// DIMENSION SPECIAL EFFECTS
 // =====================================
 
-function applyDimension() {
+function applyDimensionRules() {
+
+    // 1D
 
     if (
         currentDimension === 1
     ) {
 
-        // 1D:
-        // Lock movement to one axis.
-
         player.position.x = 0;
-
-        scene.fog.near = 10;
-        scene.fog.far = 50;
     }
 
-    else if (
+    // 2D
+
+    if (
         currentDimension === 2
     ) {
 
-        // 2D:
-        // Flatten the world.
-
-        scene.fog.near = 20;
-        scene.fog.far = 80;
-
-        for (
-            const block of blocks
-        ) {
-
-            if (
-                Math.abs(
-                    block.position.z
-                ) > 0.5
-            ) {
-
-                block.visible = false;
-
-            } else {
-
-                block.visible = true;
-            }
-        }
+        player.position.z =
+            Math.round(
+                player.position.z
+            );
     }
 
-    else {
-
-        // 3D+
-
-        for (
-            const block of blocks
-        ) {
-            block.visible = true;
-        }
-    }
-
-    // Higher dimensions:
-    // Add visual effects.
+    // 3D+
 
     if (
-        currentDimension >= 4
+        currentDimension >= 3
     ) {
 
-        scene.background =
-            new THREE.Color(
-                0x332255
-            );
-
-    } else {
-
-        scene.background =
-            new THREE.Color(
-                0x87ceeb
-            );
+        // Normal movement.
     }
 }
 
@@ -623,7 +768,8 @@ function animate() {
             0.05
         );
 
-    previousTime = now;
+    previousTime =
+        now;
 
     // =================================
     // MOVEMENT
@@ -632,29 +778,35 @@ function animate() {
     const direction =
         new THREE.Vector3();
 
-    if (keys["KeyW"])
+    if (
+        keys["KeyW"]
+    ) {
         direction.z -= 1;
+    }
 
-    if (keys["KeyS"])
+    if (
+        keys["KeyS"]
+    ) {
         direction.z += 1;
+    }
+
+    // A/D only work in 2D+
 
     if (
         currentDimension >= 2
     ) {
 
-        if (keys["KeyA"])
+        if (
+            keys["KeyA"]
+        ) {
             direction.x -= 1;
+        }
 
-        if (keys["KeyD"])
+        if (
+            keys["KeyD"]
+        ) {
             direction.x += 1;
-    }
-
-    // 1D restriction
-
-    if (
-        currentDimension === 1
-    ) {
-        direction.x = 0;
+        }
     }
 
     if (
@@ -696,19 +848,27 @@ function animate() {
         delta;
 
     // =================================
-    // GROUND
+    // GROUND COLLISION
     // =================================
 
     if (
         player.position.y < 1.5
     ) {
 
-        player.position.y = 1.5;
+        player.position.y =
+            1.5;
 
         player.velocity.y = 0;
 
-        player.grounded = true;
+        player.grounded =
+            true;
     }
+
+    // =================================
+    // DIMENSION RULES
+    // =================================
+
+    applyDimensionRules();
 
     // =================================
     // CAMERA
@@ -721,15 +881,23 @@ function animate() {
     camera.rotation.order =
         "YXZ";
 
-    camera.rotation.y = yaw;
+    camera.rotation.y =
+        yaw;
 
-    camera.rotation.x = pitch;
+    camera.rotation.x =
+        pitch;
 
     renderer.render(
         scene,
         camera
     );
 }
+
+// =====================================
+// START
+// =====================================
+
+updateDimensionUI();
 
 animate();
 
