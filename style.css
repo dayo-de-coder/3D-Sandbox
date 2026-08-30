@@ -401,3 +401,53 @@ body.time-future #game {
         text-align: center;
     }
 }
+
+/* =====================================
+   CROSSHAIR
+   ===================================== */
+
+#crosshair {
+    position: fixed;
+
+    left: 50%;
+    top: 50%;
+
+    width: 22px;
+    height: 22px;
+
+    transform:
+        translate(-50%, -50%);
+
+    z-index: 40;
+
+    pointer-events: none;
+}
+
+#crosshair span {
+    position: absolute;
+
+    left: 50%;
+    top: 50%;
+
+    background: white;
+
+    box-shadow:
+        0 0 3px black,
+        0 0 6px rgba(0, 0, 0, .8);
+}
+
+#crosshair span:first-child {
+    width: 2px;
+    height: 18px;
+
+    transform:
+        translate(-50%, -50%);
+}
+
+#crosshair span:last-child {
+    width: 18px;
+    height: 2px;
+
+    transform:
+        translate(-50%, -50%);
+}
