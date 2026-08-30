@@ -1,20 +1,6 @@
 // =====================================
-// 3D SANDBOX - WORLD ENGINE
-// V1.7
-// =====================================
-
-// This file controls:
-// - The shared world
-// - Dimensions
-// - Time
-// - Block history
-// - Changes caused by higher dimensions
-//
-// game.js will use this system for
-// physics, rendering, and interaction.
-
-// =====================================
-// WORLD STATE
+// 3D SANDBOX
+// V1.8 INFINITE WORLD ENGINE
 // =====================================
 
 export const World = {
@@ -31,9 +17,12 @@ export const World = {
 
     futureChanges: new Map(),
 
-    dimensionChanges: new Map()
+    dimensionChanges: new Map(),
+
+    chunks: new Map()
 
 };
+
 
 // =====================================
 // DIMENSIONS
@@ -56,9 +45,6 @@ export const Dimensions = {
         6: "6D"
     },
 
-    // Higher dimensions can affect
-    // lower dimensions.
-
     affects: {
 
         1: [1],
@@ -77,6 +63,7 @@ export const Dimensions = {
 
 };
 
+
 // =====================================
 // TIME
 // =====================================
@@ -91,11 +78,10 @@ export const Time = {
 
     current: 0,
 
-    // Every change receives a timestamp.
-
     now() {
 
         return World.time;
+
     },
 
     set(value) {
@@ -138,6 +124,30 @@ export const Time = {
 
 };
 
+
+// =====================================
+// CHUNK SETTINGS
+// =====================================
+
+export const CHUNK_SIZE = 16;
+
+export const RENDER_DISTANCE = 5;
+
+
+// =====================================
+// CHUNK ID
+// =====================================
+
+export function getChunkId(
+    chunkX,
+    chunkZ
+) {
+
+    return `${chunkX},${chunkZ}`;
+
+}
+
+
 // =====================================
 // BLOCK ID
 // =====================================
@@ -151,6 +161,97 @@ export function getBlockId(
     return `${Math.round(x)},${Math.round(y)},${Math.round(z)}`;
 
 }
+
+
+// =====================================
+// WORLD → CHUNK
+// =====================================
+
+export function worldToChunk(
+    x,
+    z
+) {
+
+    return {
+
+        x: Math.floor(
+            x / CHUNK_SIZE
+        ),
+
+        z: Math.floor(
+            z / CHUNK_SIZE
+        )
+
+    };
+
+}
+
+
+// =====================================
+// DETERMINISTIC RANDOM
+// =====================================
+
+function seededRandom(
+    x,
+    z
+) {
+
+    let value =
+        Math.sin(
+            x * 127.1 +
+            z * 311.7
+        ) *
+        43758.5453123;
+
+    return value -
+        Math.floor(value);
+
+}
+
+
+// =====================================
+// TERRAIN HEIGHT
+// =====================================
+
+function terrainHeight(
+    x,
+    z
+) {
+
+    const large =
+        Math.sin(
+            x * 0.025
+        ) * 7 +
+
+        Math.cos(
+            z * 0.03
+        ) * 6;
+
+    const medium =
+        Math.sin(
+            (x + z) * 0.08
+        ) * 2;
+
+    const small =
+        Math.sin(
+            x * 0.2
+        ) *
+        Math.cos(
+            z * 0.2
+        );
+
+    return Math.max(
+        1,
+        Math.floor(
+            5 +
+            large +
+            medium +
+            small
+        )
+    );
+
+}
+
 
 // =====================================
 // CREATE BLOCK
@@ -197,15 +298,15 @@ export function createWorldBlock(
         block
     );
 
-    // Record the creation.
-
     recordChange(
         "CREATE",
         block
     );
 
     return block;
+
 }
+
 
 // =====================================
 // REMOVE BLOCK
@@ -228,7 +329,9 @@ export function removeWorldBlock(
         World.blocks.get(id);
 
     if (!block) {
+
         return false;
+
     }
 
     block.removedAt =
@@ -240,7 +343,9 @@ export function removeWorldBlock(
     );
 
     return true;
+
 }
+
 
 // =====================================
 // GET BLOCK
@@ -252,20 +357,283 @@ export function getWorldBlock(
     z
 ) {
 
-    const id =
+    return World.blocks.get(
         getBlockId(
             x,
             y,
             z
-        );
-
-    return World.blocks.get(
-        id
+        )
     );
+
 }
 
+
 // =====================================
-// IS BLOCK VISIBLE?
+// GENERATE CHUNK
+// =====================================
+
+export function generateChunk(
+    chunkX,
+    chunkZ
+) {
+
+    const chunkId =
+        getChunkId(
+            chunkX,
+            chunkZ
+        );
+
+    if (
+        World.chunks.has(
+            chunkId
+        )
+    ) {
+
+        return;
+
+    }
+
+    World.chunks.set(
+        chunkId,
+        true
+    );
+
+    const startX =
+        chunkX *
+        CHUNK_SIZE;
+
+    const startZ =
+        chunkZ *
+        CHUNK_SIZE;
+
+
+    for (
+        let localX = 0;
+        localX < CHUNK_SIZE;
+        localX++
+    ) {
+
+        for (
+            let localZ = 0;
+            localZ < CHUNK_SIZE;
+            localZ++
+        ) {
+
+            const x =
+                startX +
+                localX;
+
+            const z =
+                startZ +
+                localZ;
+
+            const height =
+                terrainHeight(
+                    x,
+                    z
+                );
+
+
+            // =============================
+            // TERRAIN
+            // =============================
+
+            for (
+                let y = -4;
+                y <= height;
+                y++
+            ) {
+
+                let type =
+                    "stone";
+
+
+                if (
+                    y === height
+                ) {
+
+                    type =
+                        "grass";
+
+                } else if (
+                    y >= height - 3
+                ) {
+
+                    type =
+                        "dirt";
+
+                }
+
+
+                createWorldBlock(
+                    x,
+                    y,
+                    z,
+                    type,
+                    3
+                );
+
+            }
+
+
+            // =============================
+            // TREES
+            // =============================
+
+            const treeChance =
+                seededRandom(
+                    x,
+                    z
+                );
+
+
+            if (
+                treeChance < 0.018 &&
+                height > 3
+            ) {
+
+                generateTree(
+                    x,
+                    height + 1,
+                    z
+                );
+
+            }
+
+        }
+
+    }
+
+}
+
+
+// =====================================
+// TREE
+// =====================================
+
+function generateTree(
+    x,
+    y,
+    z
+) {
+
+    const trunkHeight =
+        4 +
+        Math.floor(
+            seededRandom(
+                x + 50,
+                z + 50
+            ) * 3
+        );
+
+
+    for (
+        let i = 0;
+        i < trunkHeight;
+        i++
+    ) {
+
+        createWorldBlock(
+            x,
+            y + i,
+            z,
+            "wood",
+            3
+        );
+
+    }
+
+
+    const top =
+        y +
+        trunkHeight;
+
+
+    for (
+        let dx = -2;
+        dx <= 2;
+        dx++
+    ) {
+
+        for (
+            let dz = -2;
+            dz <= 2;
+            dz++
+        ) {
+
+            for (
+                let dy = -2;
+                dy <= 1;
+                dy++
+            ) {
+
+                if (
+                    Math.abs(dx) +
+                    Math.abs(dz) <=
+                    3
+                ) {
+
+                    createWorldBlock(
+                        x + dx,
+                        top + dy,
+                        z + dz,
+                        "leaves",
+                        3
+                    );
+
+                }
+
+            }
+
+        }
+
+    }
+
+}
+
+
+// =====================================
+// LOAD WORLD AROUND PLAYER
+// =====================================
+
+export function loadChunksAround(
+    playerX,
+    playerZ
+) {
+
+    const center =
+        worldToChunk(
+            playerX,
+            playerZ
+        );
+
+
+    for (
+        let x = -RENDER_DISTANCE;
+        x <= RENDER_DISTANCE;
+        x++
+    ) {
+
+        for (
+            let z = -RENDER_DISTANCE;
+            z <= RENDER_DISTANCE;
+            z++
+        ) {
+
+            generateChunk(
+                center.x + x,
+                center.z + z
+            );
+
+        }
+
+    }
+
+}
+
+
+// =====================================
+// ACTIVE BLOCKS
 // =====================================
 
 export function isBlockActive(
@@ -277,42 +645,52 @@ export function isBlockActive(
 ) {
 
     if (!block) {
+
         return false;
+
     }
 
-    // A dimension can see its own
-    // dimension and lower dimensions.
 
     const allowed =
         Dimensions.affects[
             dimension
         ];
 
+
     if (
         !allowed.includes(
             block.dimension
         )
     ) {
+
         return false;
+
     }
 
-    // Time rules.
 
     if (
         block.createdAt > time
     ) {
+
         return false;
+
     }
+
 
     if (
         block.removedAt !== null &&
         block.removedAt <= time
     ) {
+
         return false;
+
     }
 
+
     return true;
+
 }
+
 
 // =====================================
 // GET ACTIVE BLOCKS
@@ -343,14 +721,18 @@ export function getActiveBlocks(
             result.push(
                 block
             );
+
         }
+
     }
 
     return result;
+
 }
 
+
 // =====================================
-// CHANGE HISTORY
+// HISTORY
 // =====================================
 
 function recordChange(
@@ -361,15 +743,20 @@ function recordChange(
     const time =
         Time.now();
 
+
     if (
-        !World.history.has(time)
+        !World.history.has(
+            time
+        )
     ) {
 
         World.history.set(
             time,
             []
         );
+
     }
+
 
     World.history
         .get(time)
@@ -382,7 +769,9 @@ function recordChange(
             }
 
         });
+
 }
+
 
 // =====================================
 // TIME SNAPSHOT
@@ -393,6 +782,7 @@ export function getTimeSnapshot(
 ) {
 
     const snapshot = [];
+
 
     for (
         const block
@@ -410,11 +800,16 @@ export function getTimeSnapshot(
             snapshot.push({
                 ...block
             });
+
         }
+
     }
 
+
     return snapshot;
+
 }
+
 
 // =====================================
 // TIME TRAVEL
@@ -431,10 +826,12 @@ export function travelToTime(
     return getTimeSnapshot(
         targetTime
     );
+
 }
 
+
 // =====================================
-// DIMENSION CHANGES
+// DIMENSION EFFECTS
 // =====================================
 
 export function recordDimensionChange(
@@ -452,7 +849,9 @@ export function recordDimensionChange(
             sourceDimension,
             []
         );
+
     }
+
 
     World.dimensionChanges
         .get(sourceDimension)
@@ -466,10 +865,12 @@ export function recordDimensionChange(
             change
 
         });
+
 }
 
+
 // =====================================
-// APPLY HIGHER-DIMENSION EFFECT
+// HIGHER DIMENSION → LOWER
 // =====================================
 
 export function affectLowerDimension(
@@ -478,16 +879,15 @@ export function affectLowerDimension(
     change
 ) {
 
-    // A dimension cannot change a
-    // higher dimension.
-
     if (
         sourceDimension <
         targetDimension
     ) {
 
         return false;
+
     }
+
 
     recordDimensionChange(
         sourceDimension,
@@ -495,8 +895,11 @@ export function affectLowerDimension(
         change
     );
 
+
     return true;
+
 }
+
 
 // =====================================
 // WORLD RESET
@@ -512,13 +915,17 @@ export function resetWorld() {
 
     World.dimensionChanges.clear();
 
+    World.chunks.clear();
+
     World.time = 0;
 
     Dimensions.current = 3;
+
 }
 
+
 // =====================================
-// WORLD INFORMATION
+// WORLD INFO
 // =====================================
 
 export function getWorldInfo() {
@@ -539,11 +946,16 @@ export function getWorldInfo() {
         blocks:
             World.blocks.size,
 
+        chunks:
+            World.chunks.size,
+
         history:
             World.history.size
 
     };
+
 }
+
 
 // =====================================
 // DEBUG
@@ -556,7 +968,7 @@ export function debugWorld() {
     );
 
     console.log(
-        "3D SANDBOX WORLD"
+        "3D SANDBOX V1.8"
     );
 
     console.log(
@@ -572,6 +984,11 @@ export function debugWorld() {
     console.log(
         "Blocks:",
         World.blocks.size
+    );
+
+    console.log(
+        "Chunks:",
+        World.chunks.size
     );
 
     console.log(
