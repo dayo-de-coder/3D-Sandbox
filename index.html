@@ -1,36 +1,30 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-    <title>Dimension Sandbox</title>
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
 
-    <link rel="stylesheet" href="style.css">
+    <title>6D Sandbox</title>
+
+    <link
+        rel="stylesheet"
+        href="style.css"
+    >
 </head>
 
 <body>
 
     <div id="game"></div>
 
-    <div id="crosshair">+</div>
-
-    <div id="info">
-        <b>DIMENSION SANDBOX</b><br><br>
-
-        WASD — Move<br>
-        SPACE — Jump<br>
-        Mouse — Look<br>
-        Left Click — Break<br>
-        Right Click — Place<br>
-        ESC — Release Mouse<br><br>
-
-        1 — 1D<br>
-        2 — 2D<br>
-        3 — 3D<br>
-        4 — 4D<br>
-        5 — 5D<br>
-        6 — 6D
+    <!-- Crosshair -->
+    <div id="crosshair">
+        <span></span>
+        <span></span>
     </div>
 
     <div id="dimension">
@@ -41,7 +35,21 @@
         Click to play
     </div>
 
-    <script type="module" src="game.js"></script>
+    <div id="warpOverlay">
+
+        <div class="warpRing"></div>
+        <div class="warpRing"></div>
+        <div class="warpRing"></div>
+        <div class="warpRing"></div>
+        <div class="warpRing"></div>
+
+    </div>
+
+    <script
+        type="module"
+        src="game.js"
+    ></script>
 
 </body>
+
 </html>
